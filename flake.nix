@@ -3,7 +3,6 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-23.05";
     flake-utils.url = "github:numtide/flake-utils";
 
     crane = {
@@ -17,9 +16,22 @@
       url = "github:edolstra/flake-compat";
       flake = false;
     };
+
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
+
+    cargo2nix = {
+      url = "github:DarkKirb/cargo2nix/release-0.11.0";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+      inputs.rust-overlay.follows = "rust-overlay";
+    };
   };
 
-  outputs = { self, nixpkgs, nixpkgs-stable, flake-utils, crane, ... }: let
+  outputs = { self, nixpkgs, flake-utils, crane, cargo2nix, rust-overlay, ... }: let
     supportedSystems = flake-utils.lib.defaultSystems;
 
     makeCranePkgs = pkgs: let
@@ -28,22 +40,46 @@
   in flake-utils.lib.eachSystem supportedSystems (system: let
     pkgs = import nixpkgs {
       inherit system;
-      overlays = [];
+      overlays = [
+        cargo2nix.overlays.default
+        (import rust-overlay)
+      ];
     };
-    cranePkgs = makeCranePkgs pkgs;
+    rustPkgs = pkgs.rustBuilder.makePackageSet {
+      packageFun = import ./Cargo.nix;
+      rustChannel = "stable";
+      rustVersion = "latest";
+      packageOverrides = pkgs: pkgs.rustBuilder.overrides.all ++ [
+        (pkgs.rustBuilder.rustLib.makeOverride {
+          name = "cxx";
+          overrideAttrs = old: {
+            postInstall = ''
+              mkdir -p $out/include/rust
+              cp include/cxx.h $out/include/rust/cxx.h
+            '';
+          };
+        })
+        (pkgs.rustBuilder.rustLib.makeOverride {
+          name = "attic";
+          overrideAttrs = old: {
+            buildInputs = old.buildInputs ++ [
+              pkgs.nix
+              pkgs.boost
+            ];
+          };
+        })
+      ];
+    };
 
-    pkgsStable = import nixpkgs-stable {
-      inherit system;
-      overlays = [];
-    };
-    cranePkgsStable = makeCranePkgs pkgsStable;
 
     inherit (pkgs) lib;
   in rec {
     packages = {
       default = packages.attic;
 
-      inherit (cranePkgs) attic attic-client attic-server;
+      attic = rustPkgs.workspace.attic {};
+      attic-client = rustPkgs.workspace.attic-client {};
+      attic-server = rustPkgs.workspace.attic-server {};
 
       attic-nixpkgs = pkgs.callPackage ./package.nix { };
 
@@ -125,6 +161,8 @@
           flyctl
 
           wrk
+
+          cargo2nix.packages.${system}.cargo2nix
         ] ++ (lib.optionals pkgs.stdenv.isLinux [
           linuxPackages.perf
         ]);
@@ -148,22 +186,6 @@
       };
     };
     devShell = devShells.default;
-
-    internal = {
-      inherit (cranePkgs) attic-tests cargoArtifacts;
-    };
-
-    checks = let
-      makeIntegrationTests = pkgs: import ./integration-tests {
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [ self.overlays.default ];
-        };
-        flake = self;
-      };
-      unstableTests = makeIntegrationTests pkgs;
-      stableTests = lib.mapAttrs' (name: lib.nameValuePair "stable-${name}") (makeIntegrationTests pkgsStable);
-    in lib.optionalAttrs pkgs.stdenv.isLinux (unstableTests // stableTests);
   }) // {
     overlays = {
       default = final: prev: let
