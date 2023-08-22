@@ -49,7 +49,7 @@ rand = "0.8.5"
 regex = "1.8.3"
 ryu = "1.0.13"
 sha2 = { version = "0.10.6", features = ["asm"] }
-serde = "=1.0.171"
+serde = "1.0.185"
 serde_json = "1.0.96"
 serde_with = "3.0.0"
 tokio-util = { version = "0.7.8", features = [ "io" ] }
