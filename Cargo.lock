@@ -2501,7 +2501,7 @@ dependencies = [
 [[package]]
 name = "nix-base32"
 version = "0.1.2-alpha.0"
-source = "git+https://github.com/zhaofengli/nix-base32.git?rev=b850c6e9273d1c39bd93abb704a53345f5be92eb#b850c6e9273d1c39bd93abb704a53345f5be92eb"
+source = "git+https://github.com/zhaofengli/nix-base32.git?branch=decoder#b850c6e9273d1c39bd93abb704a53345f5be92eb"
 
 [[package]]
 name = "nom"
@@ -3276,9 +3276,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.101.3"
+version = "0.101.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "261e9e0888cba427c3316e6322805653c9425240b6fd96cee7cb671ab70ab8d0"
+checksum = "7d93931baf2d282fff8d3a532bbfd7653f734643161b87e3e01e59a04439bf0d"
 dependencies = [
  "ring",
  "untrusted",
@@ -3736,9 +3736,9 @@ checksum = "f27f6278552951f1f2b8cf9da965d10969b2efdea95a6ec47987ab46edfe263a"
 
 [[package]]
 name = "slab"
-version = "0.4.8"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6528351c9bc8ab22353f9d776db39a20288e8d6c37ef8cfe3317cf875eecfc2d"
+checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
 dependencies = [
  "autocfg",
 ]
