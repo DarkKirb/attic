@@ -231,13 +231,14 @@ async fn run_reap_orphan_chunks(state: &State) -> Result<()> {
         .map(|r| r.unwrap())
         .collect();
 
-    // Finally, delete them from the database
-    let deletion = Chunk::delete_many()
-        .filter(chunk::Column::Id.is_in(deleted_chunk_ids))
-        .exec(db)
-        .await?;
-
-    tracing::info!("Deleted {} orphan chunks", deletion.rows_affected);
+    for chunk in deleted_chunk_ids.chunks(1024) {
+      // Finally, delete them from the database
+      let deletion = Chunk::delete_many()
+          .filter(chunk::Column::Id.is_in(chunk.to_vec()))
+          .exec(db)
+          .await?;
+      tracing::info!("Deleted {} orphan chunks", deletion.rows_affected);
+    }
 
     Ok(())
 }
