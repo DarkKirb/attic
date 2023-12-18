@@ -4,27 +4,24 @@
 # For a nixpkgs-acceptable form of the package expression, see `package.nixpkgs.nix`
 # which will be submitted when the Attic API is considered stable. However, that
 # expression is not tested by CI so to not slow down the hot path.
-
-{ stdenv
-, lib
-, craneLib
-, rustPlatform
-, runCommand
-, writeReferencesToFile
-, pkg-config
-, installShellFiles
-, jq
-
-, nix
-, boost
-, darwin
-, libiconv
-}:
-
-let
+{
+  stdenv,
+  lib,
+  craneLib,
+  rustPlatform,
+  runCommand,
+  writeReferencesToFile,
+  pkg-config,
+  installShellFiles,
+  jq,
+  nix,
+  boost,
+  darwin,
+  libiconv,
+}: let
   version = "0.1.0";
 
-  ignoredPaths = [ ".github" "target" "book" "nixos" "integration-tests" ];
+  ignoredPaths = [".github" "target" "book" "nixos" "integration-tests"];
 
   src = lib.cleanSourceWith {
     filter = name: type: !(type == "directory" && builtins.elem (baseNameOf name) ignoredPaths);
@@ -36,12 +33,15 @@ let
     installShellFiles
   ];
 
-  buildInputs = [
-    nix boost
-  ] ++ lib.optionals stdenv.isDarwin [
-    darwin.apple_sdk.frameworks.SystemConfiguration
-    libiconv
-  ];
+  buildInputs =
+    [
+      nix
+      boost
+    ]
+    ++ lib.optionals stdenv.isDarwin [
+      darwin.apple_sdk.frameworks.SystemConfiguration
+      libiconv
+    ];
 
   cargoArtifacts = craneLib.buildDepsOnly {
     pname = "attic";
@@ -56,34 +56,36 @@ let
     installCargoArtifactsMode = "use-zstd";
   };
 
-  mkAttic = args: craneLib.buildPackage ({
-    pname = "attic";
-    inherit src version nativeBuildInputs buildInputs cargoArtifacts;
+  mkAttic = args:
+    craneLib.buildPackage ({
+        pname = "attic";
+        inherit src version nativeBuildInputs buildInputs cargoArtifacts;
 
-    ATTIC_DISTRIBUTOR = "attic";
+        ATTIC_DISTRIBUTOR = "attic";
 
-    # See comment in `attic-tests`
-    doCheck = false;
+        # See comment in `attic-tests`
+        doCheck = false;
 
-    cargoExtraArgs = "-p attic-client -p attic-server";
+        cargoExtraArgs = "-p attic-client -p attic-server";
 
-    postInstall = lib.optionalString (stdenv.hostPlatform == stdenv.buildPlatform) ''
-      if [[ -f $out/bin/attic ]]; then
-        installShellCompletion --cmd attic \
-          --bash <($out/bin/attic gen-completions bash) \
-          --zsh <($out/bin/attic gen-completions zsh) \
-          --fish <($out/bin/attic gen-completions fish)
-      fi
-    '';
+        postInstall = lib.optionalString (stdenv.hostPlatform == stdenv.buildPlatform) ''
+          if [[ -f $out/bin/attic ]]; then
+            installShellCompletion --cmd attic \
+              --bash <($out/bin/attic gen-completions bash) \
+              --zsh <($out/bin/attic gen-completions zsh) \
+              --fish <($out/bin/attic gen-completions fish)
+          fi
+        '';
 
-    meta = with lib; {
-      description = "Multi-tenant Nix binary cache system";
-      homepage = "https://github.com/zhaofengli/attic";
-      license = licenses.asl20;
-      maintainers = with maintainers; [ zhaofengli ];
-      platforms = platforms.linux ++ platforms.darwin;
-    };
-  } // args);
+        meta = with lib; {
+          description = "Multi-tenant Nix binary cache system";
+          homepage = "https://github.com/zhaofengli/attic";
+          license = licenses.asl20;
+          maintainers = with maintainers; [zhaofengli];
+          platforms = platforms.linux ++ platforms.darwin;
+        };
+      }
+      // args);
 
   attic = mkAttic {
     cargoExtraArgs = "-p attic-client -p attic-server";
@@ -128,7 +130,7 @@ let
 
     inherit src version buildInputs cargoArtifacts;
 
-    nativeBuildInputs = nativeBuildInputs ++ [ jq ];
+    nativeBuildInputs = nativeBuildInputs ++ [jq];
 
     doCheck = true;
 

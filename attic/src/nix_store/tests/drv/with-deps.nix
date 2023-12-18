@@ -1,5 +1,7 @@
 #!/bin/sh
-/*/sh -c "echo Hi! I depend on $dep. > $out"; exit 0; */
+/*
+/sh -c "echo Hi! I depend on $dep. > $out"; exit 0;
+*/
 let
   a = derivation {
     name = "attic-test-with-deps-a";
@@ -18,4 +20,5 @@ let
     builder = ./with-deps.nix;
     system = "x86_64-linux";
   };
-in a
+in
+  a

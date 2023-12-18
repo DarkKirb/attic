@@ -1,5 +1,11 @@
-{ pkgs, lib, config, flake, attic, ... }:
-let
+{
+  pkgs,
+  lib,
+  config,
+  flake,
+  attic,
+  ...
+}: let
   inherit (lib) types;
 
   serverConfigFile = config.nodes.server.services.atticd.configFile;
@@ -34,7 +40,7 @@ let
       server = {
         services.postgresql = {
           enable = true;
-          ensureDatabases = [ "attic" ];
+          ensureDatabases = ["attic"];
           ensureUsers = [
             {
               name = "atticd";
@@ -78,7 +84,7 @@ let
           MINIO_ROOT_PASSWORD=${secretKey}
         '';
 
-        networking.firewall.allowedTCPPorts = [ 9000 ];
+        networking.firewall.allowedTCPPorts = [9000];
 
         services.atticd.settings = {
           storage = {
@@ -103,11 +109,11 @@ let
 in {
   options = {
     database = lib.mkOption {
-      type = types.enum [ "sqlite" "postgres" ];
+      type = types.enum ["sqlite" "postgres"];
       default = "sqlite";
     };
     storage = lib.mkOption {
-      type = types.enum [ "local" "minio" ];
+      type = types.enum ["local" "minio"];
       default = "local";
     };
   };
@@ -143,13 +149,13 @@ in {
           };
         };
 
-        environment.systemPackages = [ pkgs.attic-server ];
+        environment.systemPackages = [pkgs.attic-server];
 
-        networking.firewall.allowedTCPPorts = [ 8080 ];
+        networking.firewall.allowedTCPPorts = [8080];
       };
 
       client = {
-        environment.systemPackages = [ pkgs.attic ];
+        environment.systemPackages = [pkgs.attic];
       };
     };
 
@@ -211,10 +217,10 @@ in {
           client.fail(f"curl -sL --fail-with-body http://server:8080/test/{test_file_hash}.narinfo")
 
       ${lib.optionalString (config.storage == "local") ''
-      with subtest("Check that all chunks are actually deleted after GC"):
-          files = server.succeed("find /var/lib/atticd/storage -type f")
-          print(f"Remaining files: {files}")
-          assert files.strip() == ""
+        with subtest("Check that all chunks are actually deleted after GC"):
+            files = server.succeed("find /var/lib/atticd/storage -type f")
+            print(f"Remaining files: {files}")
+            assert files.strip() == ""
       ''}
 
       with subtest("Check that we can include the upload info in the payload"):

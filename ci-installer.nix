@@ -1,15 +1,12 @@
 # Generates a script to bootstrap the Attic client with a substituter for
 # CI usage. Will be simplier when Attic is in cache.nixos.org.
-
-{ self
-, writeText
-, writeScript
-
-, substituter ? "https://staging.attic.rs/attic-ci"
-, trustedPublicKey ? "attic-ci:U5Sey4mUxwBXM3iFapmP0/ogODXywKLRNgRPQpEXxbo="
-}:
-
-let
+{
+  self,
+  writeText,
+  writeScript,
+  substituter ? "https://staging.attic.rs/attic-ci",
+  trustedPublicKey ? "attic-ci:U5Sey4mUxwBXM3iFapmP0/ogODXywKLRNgRPQpEXxbo=",
+}: let
   cacheNixosOrg = "https://cache.nixos.org";
   cacheNixosOrgKey = "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=";
 
@@ -42,7 +39,8 @@ let
 
   makeBootstrap = system: let
     package =
-      if system == "x86_64-linux" then self.packages.${system}.attic-client-static
+      if system == "x86_64-linux"
+      then self.packages.${system}.attic-client-static
       else self.packages.${system}.attic-client;
   in ''
     "${system}" = (mkFakeDerivation {
@@ -79,4 +77,5 @@ let
 
     nix-env --substituters "${substituter} ${cacheNixosOrg}" --trusted-public-keys "${trustedPublicKey} ${cacheNixosOrgKey}" -if "$expr"
   '';
-in bootstrapScript
+in
+  bootstrapScript

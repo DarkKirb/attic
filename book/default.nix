@@ -1,40 +1,50 @@
-{ lib, stdenv, nix-gitignore, mdbook, mdbook-linkcheck, python3, callPackage, writeScript
-, attic ? null
-}:
-
-let
+{
+  lib,
+  stdenv,
+  nix-gitignore,
+  mdbook,
+  mdbook-linkcheck,
+  python3,
+  callPackage,
+  writeScript,
+  attic ? null,
+}: let
   colorizedHelp = let
     help = callPackage ./colorized-help.nix {
       inherit attic;
     };
-  in if attic != null then help else null;
-in stdenv.mkDerivation {
-  inherit colorizedHelp;
+  in
+    if attic != null
+    then help
+    else null;
+in
+  stdenv.mkDerivation {
+    inherit colorizedHelp;
 
-  name = "attic-book";
+    name = "attic-book";
 
-  src = nix-gitignore.gitignoreSource [] ./.;
+    src = nix-gitignore.gitignoreSource [] ./.;
 
-  nativeBuildInputs = [ mdbook ];
+    nativeBuildInputs = [mdbook];
 
-  buildPhase = ''
-    emitColorizedHelp() {
-      command=$1
+    buildPhase = ''
+      emitColorizedHelp() {
+        command=$1
 
-      if [[ -n "$colorizedHelp" ]]; then
-          cat "$colorizedHelp/$command.md" >> src/reference/$command-cli.md
-      else
-          echo "Error: No attic executable passed to the builder" >> src/reference/$command-cli.md
-      fi
-    }
+        if [[ -n "$colorizedHelp" ]]; then
+            cat "$colorizedHelp/$command.md" >> src/reference/$command-cli.md
+        else
+            echo "Error: No attic executable passed to the builder" >> src/reference/$command-cli.md
+        fi
+      }
 
-    emitColorizedHelp attic
-    emitColorizedHelp atticd
-    emitColorizedHelp atticadm
+      emitColorizedHelp attic
+      emitColorizedHelp atticd
+      emitColorizedHelp atticadm
 
-    mdbook build -d ./build
-    cp -r ./build $out
-  '';
+      mdbook build -d ./build
+      cp -r ./build $out
+    '';
 
-  installPhase = "true";
-}
+    installPhase = "true";
+  }
