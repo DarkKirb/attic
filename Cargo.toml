@@ -1,11 +1,7 @@
 [workspace]
 
-members = [
-	"attic",
-	"client",
-	"server",
-	"token",
-]
+members = ["attic", "client", "server", "token", "queue"]
+resolver = "2"
 
 [profile.release]
 lto = true

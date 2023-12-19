@@ -94,6 +94,7 @@
           attic = rustPkgs.workspace.attic {};
           attic-client = rustPkgs.workspace.attic-client {};
           attic-server = rustPkgs.workspace.attic-server {};
+          attic-queue = rustPkgs.workspace.attic-queue {};
 
           attic-nixpkgs = pkgs.callPackage ./package.nix {};
 

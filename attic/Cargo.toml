@@ -15,7 +15,7 @@ futures = "0.3.28"
 hex = "0.4.3"
 lazy_static = "1.4.0"
 log = "0.4.20"
-nix-base32 = { git = "https://github.com/zhaofengli/nix-base32.git", branch="decoder" }
+nix-base32 = { git = "https://github.com/zhaofengli/nix-base32.git", branch = "decoder" }
 regex = "1.9.5"
 serde = { version = "1.0.188", features = ["derive"] }
 serde_yaml = "0.9.25"
@@ -31,12 +31,7 @@ cxx = { version = "1.0.107", optional = true }
 [dependencies.tokio]
 version = "1.32.0"
 optional = true
-features = [
-	"fs",
-	"io-util",
-	"process",
-	"sync",
-]
+features = ["fs", "io-util", "process", "sync"]
 
 [dev-dependencies]
 serde_json = "1.0.105"
@@ -48,14 +43,14 @@ pkg-config = "0.3.27"
 tempfile = "3.8.0"
 
 [features]
-default = [ "nix_store", "tokio" ]
+default = ["nix_store", "tokio"]
 
 # Native libnixstore bindings.
 #
 # When disabled, the native Rust portions of nix_store can still be used.
-nix_store = [ "dep:cxx", "dep:cxx-build" ]
+nix_store = ["dep:cxx", "dep:cxx-build"]
 
 # Tokio.
 #
 # When disabled, any part depending on tokio is unavailable.
-tokio = [ "dep:tokio", "dep:async-stream" ]
+tokio = ["dep:tokio", "dep:async-stream"]
