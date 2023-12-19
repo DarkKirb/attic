@@ -122,13 +122,13 @@ async fn enqueue_thread(db: Arc<Db>, store: Arc<NixStore>, notifier: Arc<Notify>
                 continue;
             }
         };
-        tokio::spawn(enqueue_path(
+        enqueue_path(
             Arc::clone(&db),
             Arc::clone(&store),
             root,
             Arc::clone(&notifier),
             api.clone(),
-        ));
+        ).await?;
     }
     Ok(())
 }
