@@ -589,6 +589,7 @@ in {
       serde = rustPackages."registry+https://github.com/rust-lang/crates.io-index".serde."1.0.193" {inherit profileName;};
       sled = rustPackages."registry+https://github.com/rust-lang/crates.io-index".sled."0.34.7" {inherit profileName;};
       tokio = rustPackages."registry+https://github.com/rust-lang/crates.io-index".tokio."1.35.0" {inherit profileName;};
+      tracing_subscriber = rustPackages."registry+https://github.com/rust-lang/crates.io-index".tracing-subscriber."0.3.18" {inherit profileName;};
     };
   });
 

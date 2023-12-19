@@ -315,6 +315,7 @@ dependencies = [
  "serde",
  "sled",
  "tokio",
+ "tracing-subscriber",
 ]
 
 [[package]]

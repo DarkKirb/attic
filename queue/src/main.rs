@@ -249,6 +249,8 @@ async fn upload_thread(db: Arc<Db>, store: Arc<NixStore>, notifier: Arc<Notify>)
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+
     let sled_path = std::env::var("SLED_PATH")?;
 
     let db = Arc::new(sled::open(sled_path)?);
