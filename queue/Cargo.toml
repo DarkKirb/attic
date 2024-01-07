@@ -12,6 +12,7 @@ attic-client = { version = "0.1.0", path = "../client" }
 bincode = "1.3.3"
 futures = "0.3.29"
 indicatif = "0.17.7"
+log = "0.4.20"
 nix = { version = "0.27.1", features = ["fs"] }
 num_cpus = "1.16.0"
 serde = { version = "1.0.193", features = ["derive"] }

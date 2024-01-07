@@ -114,6 +114,22 @@
         "type": "github"
       }
     },
+    "nixtoo": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1704619189,
+        "narHash": "sha256-o1XsJ7Q9KhjHAJNyJmYT9or4Haha97QgZBREMWXJ1ms=",
+        "owner": "DarkKirb",
+        "repo": "nixtoo",
+        "rev": "65cf8c4b42aad2f908ec96e0196920047f1e0b2e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "DarkKirb",
+        "repo": "nixtoo",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "cargo2nix": "cargo2nix",
@@ -121,6 +137,7 @@
         "flake-compat": "flake-compat_2",
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
+        "nixtoo": "nixtoo",
         "rust-overlay": "rust-overlay"
       }
     },

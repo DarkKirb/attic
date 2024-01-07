@@ -29,6 +29,10 @@
       inputs.flake-utils.follows = "flake-utils";
       inputs.rust-overlay.follows = "rust-overlay";
     };
+    nixtoo = {
+      url = "github:DarkKirb/nixtoo";
+      flake = false;
+    };
   };
 
   outputs = {
@@ -38,6 +42,7 @@
     crane,
     cargo2nix,
     rust-overlay,
+    nixtoo,
     ...
   }: let
     supportedSystems = flake-utils.lib.defaultSystems;
@@ -51,9 +56,11 @@
       pkgs = import nixpkgs {
         inherit system;
         overlays = [
+          (import "${nixtoo}/overlay.nix")
           cargo2nix.overlays.default
           (import rust-overlay)
         ];
+        config.contentAddressedByDefault = true;
       };
       rustPkgs = pkgs.rustBuilder.makePackageSet {
         packageFun = import ./Cargo.nix;

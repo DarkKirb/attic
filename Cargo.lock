@@ -310,6 +310,7 @@ dependencies = [
  "bincode",
  "futures",
  "indicatif",
+ "log",
  "nix",
  "num_cpus",
  "serde",

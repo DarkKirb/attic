@@ -584,6 +584,7 @@ in {
       bincode = rustPackages."registry+https://github.com/rust-lang/crates.io-index".bincode."1.3.3" {inherit profileName;};
       futures = rustPackages."registry+https://github.com/rust-lang/crates.io-index".futures."0.3.29" {inherit profileName;};
       indicatif = rustPackages."registry+https://github.com/rust-lang/crates.io-index".indicatif."0.17.7" {inherit profileName;};
+      log = rustPackages."registry+https://github.com/rust-lang/crates.io-index".log."0.4.20" {inherit profileName;};
       nix = rustPackages."registry+https://github.com/rust-lang/crates.io-index".nix."0.27.1" {inherit profileName;};
       num_cpus = rustPackages."registry+https://github.com/rust-lang/crates.io-index".num_cpus."1.16.0" {inherit profileName;};
       serde = rustPackages."registry+https://github.com/rust-lang/crates.io-index".serde."1.0.193" {inherit profileName;};
