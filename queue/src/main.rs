@@ -1,11 +1,13 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs::{self},
-    path::Path,
+    fs,
+    ops::Deref,
     sync::Arc,
 };
 
 use anyhow::Result;
+use app_queue::{AppQueue, Job};
+use async_trait::async_trait;
 use attic::{
     cache::CacheName,
     nix_store::{NixStore, StorePath, StorePathHash, ValidPathInfo},
@@ -13,16 +15,133 @@ use attic::{
 use attic_client::{api::ApiClient, cache::CacheRef, config::Config, push::upload_path};
 use futures::future::join_all;
 use indicatif::MultiProgress;
-use log::{error, info};
+use log::{debug, info, warn};
 use nix::{sys::stat::Mode, unistd::mkfifo};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use sled::Db;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     net::unix::pipe,
-    sync::{Notify, Semaphore},
-    task::JoinSet,
 };
+
+static NIX_STORE: Lazy<Arc<NixStore>> = Lazy::new(|| Arc::new(NixStore::connect().unwrap()));
+static CACHE_NAME: Lazy<CacheName> = Lazy::new(|| CacheName::new("chir-rs".to_string()).unwrap());
+static API: Lazy<ApiClient> = Lazy::new(|| {
+    let config = Config::load().unwrap();
+    let cache_ref = CacheRef::DefaultServer(CACHE_NAME.clone());
+    let (_, server, _) = config.resolve_cache(&cache_ref).unwrap();
+    ApiClient::from_server_config(server.clone()).unwrap()
+});
+static MULTI_PROGRESS: Lazy<MultiProgress> = Lazy::new(MultiProgress::new);
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+struct QueuedInput {
+    path: StorePath,
+}
+
+#[typetag::serde]
+#[async_trait]
+impl Job for QueuedInput {
+    async fn run(&mut self, queue: Arc<AppQueue>) -> Result<()> {
+        debug!("Starting to preprocess path: {:?}", self.path);
+
+        let mut deps = NIX_STORE
+            .compute_fs_closure(self.path.clone(), false, true, true)
+            .await?;
+        deps.push(self.path.clone());
+
+        info!("Prepocess: {:?} has {} dependencies", self.path, deps.len());
+
+        let mut store_path_map: HashMap<StorePathHash, ValidPathInfo> = {
+            let futures = deps
+                .iter()
+                .map(|path| {
+                    let path = path.clone();
+                    let path_hash = path.to_hash();
+
+                    async move {
+                        let path_info = NIX_STORE.query_path_info(path).await?;
+                        Ok((path_hash, path_info))
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            join_all(futures).await.into_iter().collect::<Result<_>>()?
+        };
+
+        info!(
+            "Fetched path info for {:?} ({} paths)",
+            self.path,
+            deps.len()
+        );
+
+        store_path_map.retain(|_, pi| {
+            !pi.sigs
+                .iter()
+                .any(|sig| sig.starts_with("cache.nixos.org-1:"))
+        });
+
+        info!(
+            "Non-upstream deps for {:?}: {}",
+            self.path,
+            store_path_map.len()
+        );
+
+        let missing_path_hashes: HashSet<StorePathHash> = {
+            let store_path_hashes = store_path_map.keys().map(|sph| sph.to_owned()).collect();
+            let res = API
+                .get_missing_paths(&CacheName::new("chir-rs".to_string())?, store_path_hashes)
+                .await?;
+            res.missing_paths.into_iter().collect()
+        };
+        store_path_map.retain(|sph, _| missing_path_hashes.contains(sph));
+
+        info!("Pre-processed path: {:?}", self.path);
+
+        for dep in deps {
+            let job_id = format!("fetch_path_info:{:?}", dep.as_os_str());
+            queue
+                .add_unique_job(job_id, Box::new(UploadPath { path: dep }))
+                .await?;
+        }
+        Ok(())
+    }
+
+    fn is_fatal_error(&self, _: &anyhow::Error) -> bool {
+        true
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+struct UploadPath {
+    path: StorePath,
+}
+
+#[typetag::serde]
+#[async_trait]
+impl Job for UploadPath {
+    async fn run(&mut self, _: Arc<AppQueue>) -> Result<()> {
+        let path_info = match NIX_STORE.query_path_info(self.path.clone()).await {
+            Ok(pi) => pi,
+            Err(e) => {
+                warn!("Path {:?} is not valid: {e:#?}. Skipping.", self.path);
+                return Ok(());
+            }
+        };
+
+        upload_path(
+            path_info,
+            Arc::clone(&*NIX_STORE),
+            API.clone(),
+            CACHE_NAME.deref(),
+            MULTI_PROGRESS.clone(),
+            false,
+        )
+        .await?;
+
+        Ok(())
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum PathState {
@@ -30,107 +149,7 @@ enum PathState {
     InProgress,
 }
 
-async fn enqueue_path(
-    db: Arc<Db>,
-    store: Arc<NixStore>,
-    path: StorePath,
-    queue_notifier: Arc<Notify>,
-) -> Result<()> {
-    let tree = db.open_tree("paths")?;
-    tree.insert(
-        store
-            .get_full_path(&path)
-            .into_os_string()
-            .into_string()
-            .map_err(|e| anyhow::anyhow!("{e:?}"))?,
-        &[] as &'static [u8],
-    )?;
-    info!("Enqueued path: {path:?}");
-    queue_notifier.notify_one();
-    Ok(())
-}
-
-async fn preprocess_path(
-    db: Arc<Db>,
-    store: Arc<NixStore>,
-    path: StorePath,
-    notifier: Arc<Notify>,
-    api: ApiClient,
-) -> Result<()> {
-    info!("Preprocessing path: {path:?}");
-    let mut deps = store
-        .compute_fs_closure(path.clone(), false, true, true)
-        .await?;
-    deps.push(path.clone());
-
-    info!("Prepocess: {path:?} has {} dependencies", deps.len());
-
-    let mut store_path_map: HashMap<StorePathHash, ValidPathInfo> = {
-        let futures = deps
-            .iter()
-            .map(|path| {
-                let store = store.clone();
-                let path = path.clone();
-                let path_hash = path.to_hash();
-
-                async move {
-                    let path_info = store.query_path_info(path).await?;
-                    Ok((path_hash, path_info))
-                }
-            })
-            .collect::<Vec<_>>();
-
-        join_all(futures).await.into_iter().collect::<Result<_>>()?
-    };
-
-    info!("Fetched path info for {path:?} ({} paths)", deps.len());
-
-    store_path_map.retain(|_, pi| {
-        !pi.sigs
-            .iter()
-            .any(|sig| sig.starts_with("cache.nixos.org-1:"))
-    });
-
-    info!("Non-upstream deps for {path:?}: {}", store_path_map.len());
-
-    let missing_path_hashes: HashSet<StorePathHash> = {
-        let store_path_hashes = store_path_map.keys().map(|sph| sph.to_owned()).collect();
-        let res = api
-            .get_missing_paths(&CacheName::new("chir-rs".to_string())?, store_path_hashes)
-            .await?;
-        res.missing_paths.into_iter().collect()
-    };
-    store_path_map.retain(|sph, _| missing_path_hashes.contains(sph));
-
-    info!("non-uploaded deps for {path:?}: {}", store_path_map.len());
-
-    let queued_ser = bincode::serialize(&PathState::Queued)?;
-
-    for (_, pi) in store_path_map {
-        db.compare_and_swap(
-            store
-                .get_full_path(&pi.path)
-                .into_os_string()
-                .into_string()
-                .unwrap(),
-            None as Option<&[u8]>,
-            Some(&queued_ser[..]),
-        )
-        .ok();
-    }
-
-    info!("Pre-processed path: {path:?}");
-
-    notifier.notify_one();
-
-    Ok(())
-}
-
-async fn enqueue_thread(
-    db: Arc<Db>,
-    store: Arc<NixStore>,
-    enqueue_notifier: Arc<Notify>,
-) -> Result<()> {
+async fn enqueue_thread(queue: Arc<AppQueue>) -> Result<()> {
     let queue_path = std::env::var("QUEUE_PATH")?;
 
     fs::remove_file(&queue_path).ok();
@@ -148,188 +167,16 @@ async fn enqueue_thread(
 
     while let Some(line) = lines.next_line().await? {
         info!("Parsed line: {line:?}");
-        let root = match store.follow_store_path(line) {
+        let root = match NIX_STORE.follow_store_path(line) {
             Ok(root) => root,
             Err(e) => {
                 eprintln!("Error: {}", e);
                 continue;
             }
         };
-        enqueue_path(
-            Arc::clone(&db),
-            Arc::clone(&store),
-            root,
-            Arc::clone(&enqueue_notifier),
-        )
-        .await?;
+        queue.add_job(Box::new(QueuedInput { path: root })).await?;
     }
     Ok(())
-}
-
-async fn resolve_thread(
-    db: Arc<Db>,
-    store: Arc<NixStore>,
-    enqueue_notifier: Arc<Notify>,
-    resolve_notifier: Arc<Notify>,
-) -> Result<()> {
-    let config = Config::load()?;
-    let cache_ref = CacheRef::DefaultServer(CacheName::new("chir-rs".to_string())?);
-    let (_, server, _) = config.resolve_cache(&cache_ref)?;
-    let api = ApiClient::from_server_config(server.clone())?;
-    let tree = db.open_tree("paths")?;
-    // Only num_cpu threads due to how intensive it can be
-    let resolve_threads = Arc::new(Semaphore::new(num_cpus::get()));
-    enqueue_notifier.notify_one();
-    loop {
-        enqueue_notifier.notified().await;
-        info!("Notification received: Paths enqueued");
-        let mut joinset = JoinSet::new();
-        for kv in tree.iter() {
-            let (key, _) = kv?;
-            let path_name = String::from_utf8(key.to_vec())?;
-            let root = match store.follow_store_path(path_name.clone()) {
-                Ok(root) => root,
-                Err(e) => {
-                    tree.remove(key).ok();
-                    eprintln!("Error: {}", e);
-                    continue;
-                }
-            };
-            let resolve_threads = Arc::clone(&resolve_threads);
-            let db = Arc::clone(&db);
-            let store = Arc::clone(&store);
-            let enqueue_notifier = Arc::clone(&enqueue_notifier);
-            let api = api.clone();
-            let resolve_notifier = Arc::clone(&resolve_notifier);
-
-            joinset.spawn(tokio::task::spawn(async move {
-                let _sem = resolve_threads.acquire().await.unwrap();
-                info!("Starting preprocess for {path_name:?}");
-                preprocess_path(Arc::clone(&db), store, root, enqueue_notifier, api).await?;
-                resolve_notifier.notify_one();
-                let tree = db.open_tree("paths")?;
-                tree.remove(key).ok();
-                info!("Preprocess done for {path_name:?}");
-                Ok(()) as Result<()>
-            }));
-        }
-        info!("Paths preprocessed");
-    }
-}
-
-async fn is_valid_path(store: &Arc<NixStore>, path: impl AsRef<Path>) -> bool {
-    let store_path = match store.parse_store_path(path) {
-        Ok(path) => path,
-        Err(_) => {
-            return false;
-        }
-    };
-
-    match store.query_path_info(store_path).await {
-        Ok(_) => true,
-        Err(_) => false,
-    }
-}
-
-async fn boot_cleanup(db: &Arc<Db>, store: &Arc<NixStore>) -> Result<()> {
-    let busy_ser = bincode::serialize(&PathState::InProgress)?;
-    let queued_ser = bincode::serialize(&PathState::Queued)?;
-    for kv in db.iter() {
-        let (key, value) = kv?;
-        if !is_valid_path(
-            store,
-            String::from_utf8(value.clone().to_vec()).unwrap_or_default(),
-        )
-        .await
-        {
-            db.remove(&value)?;
-            continue;
-        }
-        let de_value: PathState = bincode::deserialize(&value)?;
-        match de_value {
-            PathState::InProgress => {
-                db.compare_and_swap(&key, Some(&value), Some(&queued_ser[..]))
-                    .ok();
-            }
-            _ => {}
-        }
-        db.compare_and_swap(&key, Some(&busy_ser[..]), Some(&queued_ser[..]))
-            .ok();
-    }
-    Ok(())
-}
-
-async fn upload_file(
-    db: Arc<Db>,
-    path: String,
-    store: Arc<NixStore>,
-    api: ApiClient,
-    cache: &CacheName,
-    mp: MultiProgress,
-    notifier: Arc<Notify>,
-) -> Result<()> {
-    let busy_ser = bincode::serialize(&PathState::InProgress)?;
-    let queued_ser = bincode::serialize(&PathState::Queued)?;
-    db.compare_and_swap(path.as_bytes(), Some(&queued_ser), Some(&busy_ser[..]))??;
-    let store_path = store.parse_store_path(&path)?;
-    let path_info = store.query_path_info(store_path).await?;
-
-    match upload_path(path_info, store, api, cache, mp, false).await {
-        Ok(_) => {
-            db.remove(path.as_bytes())?;
-            Ok(())
-        }
-        Err(e) => {
-            db.insert(path.as_bytes(), &queued_ser[..])?;
-            notifier.notify_one();
-            Err(e.into())
-        }
-    }
-}
-
-async fn upload_thread(db: Arc<Db>, store: Arc<NixStore>, notifier: Arc<Notify>) -> Result<()> {
-    let config = Config::load()?;
-    let cache_ref = CacheRef::DefaultServer(CacheName::new("chir-rs".to_string())?);
-    let (_, server, cache) = config.resolve_cache(&cache_ref)?;
-    let api = ApiClient::from_server_config(server.clone())?;
-    let mp = MultiProgress::new();
-
-    notifier.notify_one();
-    let upload_semaphore = Arc::new(Semaphore::new(num_cpus::get() * 4));
-    loop {
-        notifier.notified().await;
-        info!("Notification received: Paths queued for upload");
-
-        // Loop through all files and figure out which ones need to be uploaded.
-        for kv in db.iter() {
-            let (key, value) = kv?;
-            let de_value: PathState = bincode::deserialize(&value)?;
-            if de_value == PathState::Queued {
-                let db = Arc::clone(&db);
-                let upload_semaphore = Arc::clone(&upload_semaphore);
-                let store = Arc::clone(&store);
-                let api = api.clone();
-                let mp = mp.clone();
-                let cache = cache.clone();
-                let notifier = Arc::clone(&notifier);
-
-                tokio::spawn(async move {
-                    let _sem = upload_semaphore.acquire().await.unwrap();
-                    upload_file(
-                        db,
-                        String::from_utf8(key.clone().to_vec()).unwrap_or_default(),
-                        store,
-                        api,
-                        &cache,
-                        mp,
-                        notifier,
-                    )
-                    .await
-                    .unwrap();
-                });
-            }
-        }
-    }
 }
 
 #[tokio::main]
@@ -337,36 +184,12 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     info!("Starting attic-queue");
 
-    let sled_path = std::env::var("SLED_PATH")?;
+    let db_path = std::env::var("DATABASE_PATH")?;
 
-    let db = Arc::new(sled::open(sled_path)?);
+    let app_queue = AppQueue::new(db_path).await?;
+    Arc::clone(&app_queue).run_job_workers_default();
 
-    let store = Arc::new(NixStore::connect()?);
-
-    boot_cleanup(&db, &store).await?;
-
-    let enqueue_notifier = Arc::new(Notify::new());
-    let resolve_notifier = Arc::new(Notify::new());
-
-    let mut joinset = JoinSet::new();
-
-    joinset.spawn(enqueue_thread(
-        Arc::clone(&db),
-        Arc::clone(&store),
-        Arc::clone(&enqueue_notifier),
-    ));
-    joinset.spawn(resolve_thread(
-        Arc::clone(&db),
-        Arc::clone(&store),
-        enqueue_notifier,
-        Arc::clone(&resolve_notifier),
-    ));
-
-    joinset.spawn(upload_thread(db, store, resolve_notifier));
-
-    while let Some(res) = joinset.join_next().await {
-        res??;
-    }
+    enqueue_thread(app_queue).await?;
 
     Ok(())
 }
