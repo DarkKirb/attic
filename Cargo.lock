@@ -153,7 +153,8 @@ dependencies = [
 [[package]]
 name = "app-queue"
 version = "0.1.0"
-source = "git+https://github.com/DarkKirb/app-queue#80224bb3584ea537dbb1251d56f5319a62898dc3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2beada7a115da5a933d83ea557ed0cdd18773d10f8c2a32fbd457c43295902a4"
 dependencies = [
  "anyhow",
  "async-trait",

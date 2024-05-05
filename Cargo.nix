@@ -252,15 +252,11 @@ in
     };
   });
   
-  "git+https://github.com/DarkKirb/app-queue".app-queue."0.1.0" = overridableMkRustCrate (profileName: rec {
+  "registry+https://github.com/rust-lang/crates.io-index".app-queue."0.1.0" = overridableMkRustCrate (profileName: rec {
     name = "app-queue";
     version = "0.1.0";
-    registry = "git+https://github.com/DarkKirb/app-queue";
-    src = fetchCrateGit {
-      url = https://github.com/DarkKirb/app-queue;
-      name = "app-queue";
-      version = "0.1.0";
-      rev = "80224bb3584ea537dbb1251d56f5319a62898dc3";};
+    registry = "registry+https://github.com/rust-lang/crates.io-index";
+    src = fetchCratesIo { inherit name version; sha256 = "2beada7a115da5a933d83ea557ed0cdd18773d10f8c2a32fbd457c43295902a4"; };
     dependencies = {
       anyhow = rustPackages."registry+https://github.com/rust-lang/crates.io-index".anyhow."1.0.82" { inherit profileName; };
       async_trait = buildRustPackages."registry+https://github.com/rust-lang/crates.io-index".async-trait."0.1.80" { profileName = "__noProfile"; };
@@ -466,7 +462,7 @@ in
     src = fetchCrateLocal (workspaceSrc + "/queue");
     dependencies = {
       anyhow = rustPackages."registry+https://github.com/rust-lang/crates.io-index".anyhow."1.0.82" { inherit profileName; };
-      app_queue = rustPackages."git+https://github.com/DarkKirb/app-queue".app-queue."0.1.0" { inherit profileName; };
+      app_queue = rustPackages."registry+https://github.com/rust-lang/crates.io-index".app-queue."0.1.0" { inherit profileName; };
       async_trait = buildRustPackages."registry+https://github.com/rust-lang/crates.io-index".async-trait."0.1.80" { profileName = "__noProfile"; };
       attic = rustPackages."unknown".attic."0.1.0" { inherit profileName; };
       attic_client = rustPackages."unknown".attic-client."0.1.0" { inherit profileName; };
