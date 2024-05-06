@@ -98,10 +98,11 @@ impl Job for QueuedInput {
 
         info!("Pre-processed path: {:?}", self.path);
 
-        for dep in deps {
+        for dep in store_path_map.values() {
+            let dep = &dep.path;
             let job_id = format!("fetch_path_info:{:?}", dep.as_os_str());
             queue
-                .add_unique_job(job_id, Box::new(UploadPath { path: dep }))
+                .add_unique_job(job_id, Box::new(UploadPath { path: dep.clone() }))
                 .await
                 .ok();
         }
