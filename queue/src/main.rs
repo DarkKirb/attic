@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::Result;
-use app_queue::{AppQueue, Job};
+use app_queue::{AppQueue, Job, JobBuilder};
 use async_trait::async_trait;
 use attic::{
     cache::CacheName,
@@ -101,8 +101,9 @@ impl Job for QueuedInput {
         for dep in store_path_map.values() {
             let dep = &dep.path;
             let job_id = format!("fetch_path_info:{:?}", dep.as_os_str());
-            queue
-                .add_unique_job(job_id, Box::new(UploadPath { path: dep.clone() }))
+            JobBuilder::new(UploadPath { path: dep.clone() })
+                .id(job_id)
+                .schedule(&queue)
                 .await
                 .ok();
         }
@@ -176,7 +177,10 @@ async fn enqueue_thread(queue: Arc<AppQueue>) -> Result<()> {
                 continue;
             }
         };
-        queue.add_job(Box::new(QueuedInput { path: root })).await?;
+        JobBuilder::new(QueuedInput { path: root })
+            .priority(1)
+            .schedule(&queue)
+            .await?;
     }
     Ok(())
 }
