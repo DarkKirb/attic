@@ -24,7 +24,7 @@
     };
 
     cargo2nix = {
-      url = "github:DarkKirb/cargo2nix/release-0.11.0";
+      url = "github:cargo2nix/cargo2nix/main";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
       inputs.rust-overlay.follows = "rust-overlay";
