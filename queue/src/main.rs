@@ -192,7 +192,7 @@ async fn main() -> Result<()> {
 
     let db_path = std::env::var("DATABASE_PATH")?;
 
-    let app_queue = AppQueue::new(db_path).await?;
+    let app_queue = AppQueue::new_dynamic(db_path).await?;
     Arc::clone(&app_queue).run_job_workers_default();
 
     enqueue_thread(app_queue).await?;
