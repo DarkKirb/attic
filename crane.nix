@@ -63,6 +63,9 @@
 
         ATTIC_DISTRIBUTOR = "attic";
 
+        # See comment in `attic/build.rs`
+        NIX_INCLUDE_PATH = "${lib.getDev nix}/include";
+
         # See comment in `attic-tests`
         doCheck = false;
 
@@ -121,6 +124,10 @@
     CARGO_PROFILE_RELEASE_CODEGEN_UNITS = "1";
   };
 
+  attic-queue = mkAttic {
+    cargoExtraArgs = " -p attic-queue";
+  };
+
   # Attic interacts with Nix directly and its tests require trusted-user access
   # to nix-daemon to import NARs, which is not possible in the build sandbox.
   # In the CI pipeline, we build the test executable inside the sandbox, then
@@ -138,6 +145,9 @@
     checkPhaseCargoCommand = "cargoWithProfile test --no-run --message-format=json >cargo-test.json";
     doInstallCargoArtifacts = false;
 
+    # See comment in `attic/build.rs`
+    NIX_INCLUDE_PATH = "${lib.getDev nix}/include";
+
     installPhase = ''
       runHook preInstall
 
@@ -149,5 +159,5 @@
     '';
   };
 in {
-  inherit cargoArtifacts attic attic-client attic-server attic-tests;
+  inherit cargoArtifacts attic attic-client attic-server attic-tests attic-queue;
 }

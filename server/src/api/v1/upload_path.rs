@@ -8,7 +8,8 @@ use anyhow::anyhow;
 use async_compression::tokio::bufread::{BrotliEncoder, XzEncoder, ZstdEncoder};
 use async_compression::Level as CompressionLevel;
 use axum::{
-    extract::{BodyStream, Extension, Json},
+    body::Body,
+    extract::{Extension, Json},
     http::HeaderMap,
 };
 use bytes::{Bytes, BytesMut};
@@ -37,16 +38,16 @@ use attic::api::v1::upload_path::{
     UploadPathNarInfo, UploadPathResult, UploadPathResultKind, ATTIC_NAR_INFO,
     ATTIC_NAR_INFO_PREAMBLE_SIZE,
 };
+use attic::chunking::chunk_stream;
 use attic::hash::Hash;
 use attic::stream::{read_chunk_async, StreamHasher};
 use attic::util::Finally;
 
-use crate::chunking::chunk_stream;
 use crate::database::entity::cache;
 use crate::database::entity::chunk::{self, ChunkState, Entity as Chunk};
 use crate::database::entity::chunkref::{self, Entity as ChunkRef};
 use crate::database::entity::nar::{self, Entity as Nar, NarState};
-use crate::database::entity::object::{self, Entity as Object};
+use crate::database::entity::object::{self, Entity as Object, InsertExt};
 use crate::database::entity::Json as DbJson;
 use crate::database::{AtticDatabase, ChunkGuard, NarGuard};
 
@@ -121,14 +122,14 @@ pub(crate) async fn upload_path(
     Extension(state): Extension<State>,
     Extension(req_state): Extension<RequestState>,
     headers: HeaderMap,
-    stream: BodyStream,
+    body: Body,
 ) -> ServerResult<Json<UploadPathResult>> {
     let compression_format = headers
         .get("Content-Encoding")
         .and_then(|e| e.to_str().ok())
         .unwrap_or("");
-
-    let stream = StreamReader::new(
+    let stream = body.into_data_stream();
+    let mut stream = StreamReader::new(
         stream.map(|r| r.map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))),
     );
 
@@ -263,12 +264,6 @@ async fn upload_path_dedup(
         .map_err(ServerError::database_error)?;
 
     // Create a mapping granting the local cache access to the NAR
-    Object::delete_many()
-        .filter(object::Column::CacheId.eq(cache.id))
-        .filter(object::Column::StorePathHash.eq(upload_info.store_path_hash.to_string()))
-        .exec(&txn)
-        .await
-        .map_err(ServerError::database_error)?;
     Object::insert({
         let mut new_object = upload_info.to_active_model();
         new_object.cache_id = Set(cache.id);
@@ -277,6 +272,7 @@ async fn upload_path_dedup(
         new_object.created_by = Set(username);
         new_object
     })
+    .on_conflict_do_update()
     .exec(&txn)
     .await
     .map_err(ServerError::database_error)?;
@@ -493,12 +489,6 @@ async fn upload_path_new_chunked(
     .map_err(ServerError::database_error)?;
 
     // Create a mapping granting the local cache access to the NAR
-    Object::delete_many()
-        .filter(object::Column::CacheId.eq(cache.id))
-        .filter(object::Column::StorePathHash.eq(upload_info.store_path_hash.to_string()))
-        .exec(&txn)
-        .await
-        .map_err(ServerError::database_error)?;
     Object::insert({
         let mut new_object = upload_info.to_active_model();
         new_object.cache_id = Set(cache.id);
@@ -507,6 +497,7 @@ async fn upload_path_new_chunked(
         new_object.created_by = Set(username);
         new_object
     })
+    .on_conflict_do_update()
     .exec(&txn)
     .await
     .map_err(ServerError::database_error)?;
@@ -600,12 +591,6 @@ async fn upload_path_new_unchunked(
     .map_err(ServerError::database_error)?;
 
     // Create a mapping granting the local cache access to the NAR
-    Object::delete_many()
-        .filter(object::Column::CacheId.eq(cache.id))
-        .filter(object::Column::StorePathHash.eq(upload_info.store_path_hash.to_string()))
-        .exec(&txn)
-        .await
-        .map_err(ServerError::database_error)?;
     Object::insert({
         let mut new_object = upload_info.to_active_model();
         new_object.cache_id = Set(cache.id);
@@ -614,6 +599,7 @@ async fn upload_path_new_unchunked(
         new_object.created_by = Set(username);
         new_object
     })
+    .on_conflict_do_update()
     .exec(&txn)
     .await
     .map_err(ServerError::database_error)?;

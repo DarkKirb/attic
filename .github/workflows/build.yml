@@ -11,15 +11,24 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-11
+          - macos-latest
+        nix:
+          - "2.20"
+          - "2.24"
+          - "default"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v3.3.0
+      - uses: actions/checkout@v4.1.1
 
-      - uses: DeterminateSystems/nix-installer-action@v1
+      - name: Install current Bash on macOS
+        if: runner.os == 'macOS'
+        run: |
+          command -v brew && brew install bash || true
+
+      - uses: DeterminateSystems/nix-installer-action@v9
         continue-on-error: true # Self-hosted runners already have Nix installed
 
       - name: Install Attic
@@ -41,23 +50,33 @@ jobs:
           ATTIC_CACHE: ${{ secrets.ATTIC_CACHE }}
           ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
 
-      - name: Build and run tests
+      - name: Cache dev shell
         run: |
+          .ci/cache-shell.sh
           system=$(nix-instantiate --eval -E 'builtins.currentSystem')
           echo system=$system >>$GITHUB_ENV
-          tests=$(nix build .#internal."$system".attic-tests --no-link --print-out-paths -L)
-          find "$tests/bin" -exec {} \;
+
+      - name: Run unit tests
+        run: |
+          .ci/run just ci-unit-tests ${{ matrix.nix }}
+
+      - name: Build WebAssembly crates
+        if: runner.os == 'Linux'
+        run: |
+          .ci/run just ci-build-wasm
 
       # TODO: Just take a diff of the list of store paths, also abstract all of this out
       - name: Push build artifacts
         run: |
           export PATH=$HOME/.nix-profile/bin:$PATH # FIXME
           if [ -n "$ATTIC_TOKEN" ]; then
-            nix build .#internal."$system".attic-tests .#internal."$system".cargoArtifacts --no-link --print-out-paths -L | \
-              xargs attic push "ci:$ATTIC_CACHE"
+            nix build --no-link --print-out-paths -L \
+              .#internalMatrix."$system".\"${{ matrix.nix }}\".attic-tests \
+              .#internalMatrix."$system".\"${{ matrix.nix }}\".cargoArtifacts \
+            | xargs attic push "ci:$ATTIC_CACHE"
           fi
       - name: Log in to the Container registry
-        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        uses: docker/login-action@v3.0.0
         if: runner.os == 'Linux' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         with:
           registry: ${{ env.REGISTRY }}

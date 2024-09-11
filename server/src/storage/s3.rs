@@ -1,20 +1,19 @@
 //! S3 remote files.
 
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::time::Duration;
 
 use async_trait::async_trait;
+use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
-    operation::get_object::builders::GetObjectFluentBuilder,
     config::Builder as S3ConfigBuilder,
-    types::{CompletedMultipartUpload, CompletedPart},
-    presigning::PresigningConfig,
     config::{Credentials, Region},
+    operation::get_object::builders::GetObjectFluentBuilder,
+    presigning::PresigningConfig,
+    types::{CompletedMultipartUpload, CompletedPart},
     Client,
 };
 use bytes::BytesMut;
 use futures::future::join_all;
-use futures::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncRead;
 
@@ -93,7 +92,7 @@ impl S3Backend {
     }
 
     async fn config_builder(config: &S3StorageConfig) -> ServerResult<S3ConfigBuilder> {
-        let shared_config = aws_config::load_from_env().await;
+        let shared_config = aws_config::load_defaults(BehaviorVersion::v2024_03_28()).await;
         let mut builder = S3ConfigBuilder::from(&shared_config);
 
         if let Some(credentials) = &config.credentials {
@@ -127,7 +126,7 @@ impl S3Backend {
         };
 
         // FIXME: Ugly
-        let client = if self.client.conf().region().unwrap().as_ref() == file.region {
+        let client = if self.client.config().region().unwrap().as_ref() == file.region {
             self.client.clone()
         } else {
             // FIXME: Cache the client instance
@@ -141,15 +140,15 @@ impl S3Backend {
         Ok((client, file))
     }
 
-    async fn get_download(&self, req: GetObjectFluentBuilder, prefer_stream: bool) -> ServerResult<Download> {
+    async fn get_download(
+        &self,
+        req: GetObjectFluentBuilder,
+        prefer_stream: bool,
+    ) -> ServerResult<Download> {
         if prefer_stream {
             let output = req.send().await.map_err(ServerError::storage_error)?;
 
-            let stream = StreamExt::map(output.body, |item| {
-                item.map_err(|e| IoError::new(IoErrorKind::Other, e))
-            });
-
-            Ok(Download::Stream(Box::pin(stream)))
+            Ok(Download::AsyncRead(Box::new(output.body.into_async_read())))
         } else {
             // FIXME: Configurable expiration
             let presign_config = PresigningConfig::expires_in(Duration::from_secs(600))

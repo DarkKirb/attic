@@ -1,5 +1,4 @@
 [workspace]
-
 members = ["attic", "client", "server", "token", "queue"]
 resolver = "2"
 

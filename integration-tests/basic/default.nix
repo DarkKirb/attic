@@ -35,7 +35,18 @@
   '';
 
   databaseModules = {
-    sqlite = {};
+    sqlite = {
+      testScriptPost = ''
+        from pathlib import Path
+        import os
+
+        schema = server.succeed("${pkgs.sqlite}/bin/sqlite3 /var/lib/atticd/server.db '.schema --indent'")
+
+        schema_path = Path(os.environ.get("out", os.getcwd())) / "schema.sql"
+        with open(schema_path, 'w') as f:
+            f.write(schema)
+      '';
+    };
     postgres = {
       server = {
         services.postgresql = {
@@ -44,9 +55,6 @@
           ensureUsers = [
             {
               name = "atticd";
-              ensurePermissions = {
-                "DATABASE attic" = "ALL PRIVILEGES";
-              };
             }
 
             # For testing only - Don't actually do this
@@ -59,10 +67,24 @@
           ];
         };
 
+        systemd.services.postgresql.postStart = lib.mkAfter ''
+          $PSQL -tAc 'ALTER DATABASE "attic" OWNER TO "atticd"'
+        '';
+
         services.atticd.settings = {
           database.url = "postgresql:///attic?host=/run/postgresql";
         };
       };
+      testScriptPost = ''
+        from pathlib import Path
+        import os
+
+        schema = server.succeed("pg_dump --schema-only attic")
+
+        schema_path = Path(os.environ.get("out", os.getcwd())) / "schema.sql"
+        with open(schema_path, 'w') as f:
+            f.write(schema)
+      '';
     };
   };
 
@@ -218,9 +240,9 @@ in {
 
       ${lib.optionalString (config.storage == "local") ''
         with subtest("Check that all chunks are actually deleted after GC"):
-            files = server.succeed("find /var/lib/atticd/storage -type f")
+            files = server.succeed("find /var/lib/atticd/storage -type f ! -name 'VERSION'")
             print(f"Remaining files: {files}")
-            assert files.strip() == ""
+            assert files.strip() == "", "Some files remain after GC: " + files
       ''}
 
       with subtest("Check that we can include the upload info in the payload"):
@@ -235,6 +257,9 @@ in {
           client.succeed("attic cache destroy --no-confirm test")
           client.fail("attic cache info test")
           client.fail("curl -sL --fail-with-body http://server:8080/test/nix-cache-info")
+
+      ${databaseModules.${config.database}.testScriptPost or ""}
+      ${storageModules.${config.storage}.testScriptPost or ""}
     '';
   };
 }
