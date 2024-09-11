@@ -129,7 +129,7 @@ pub(crate) async fn upload_path(
         .and_then(|e| e.to_str().ok())
         .unwrap_or("");
     let stream = body.into_data_stream();
-    let mut stream = StreamReader::new(
+    let stream = StreamReader::new(
         stream.map(|r| r.map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))),
     );
 
