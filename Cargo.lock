@@ -159,7 +159,7 @@ dependencies = [
 [[package]]
 name = "app-queue"
 version = "0.2.0"
-source = "git+https://github.com/DarkKirb/app-queue#bd1092d37c53f23efd899147b94029c6ba89e9c2"
+source = "git+https://github.com/DarkKirb/app-queue#aab95110f11920a71267e2dcdba0ebc4cac6d456"
 dependencies = [
  "anyhow",
  "async-trait",
