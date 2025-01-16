@@ -46,7 +46,6 @@ token-hs256-secret-base64 = "%token_hs256_secret_base64%"
 # Connection URL
 #
 # For production use it's recommended to use PostgreSQL.
-url = "%database_url%"
 
 # Whether to enable sending on periodic heartbeat queries
 #
@@ -85,7 +84,7 @@ path = "%storage_path%"
 #[storage.credentials]
 #  access_key_id = ""
 #  secret_access_key = ""
- 
+
 # Data chunking
 #
 # Warning: If you change any of the values here, it will be
