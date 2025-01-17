@@ -176,6 +176,8 @@ in {
 
       services.atticd.settings = {
 
+        database = lib.mkDefault {};
+
         # "storage" is internally tagged
         # if the user sets something the whole thing must be replaced
         storage = lib.mkDefault {
