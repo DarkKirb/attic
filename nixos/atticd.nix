@@ -3,7 +3,9 @@
   pkgs,
   config,
   ...
-}: let
+}:
+
+let
   inherit (lib) types;
 
   cfg = config.services.atticd;
@@ -12,19 +14,21 @@
   flake = import ../flake-compat.nix;
   overlay = flake.defaultNix.overlays.default;
 
-  format = pkgs.formats.toml {};
+  format = pkgs.formats.toml { };
 
   checkedConfigFile =
-    pkgs.runCommand "checked-attic-server.toml" {
-      configFile = cfg.configFile;
-    } ''
-      cat $configFile
+    pkgs.runCommand "checked-attic-server.toml"
+      {
+        configFile = cfg.configFile;
+      }
+      ''
+        cat $configFile
 
-      export ATTIC_SERVER_TOKEN_HS256_SECRET_BASE64="dGVzdCBzZWNyZXQ="
-      export ATTIC_SERVER_DATABASE_URL="sqlite://:memory:"
-      ${cfg.package}/bin/atticd --mode check-config -f $configFile
-      cat <$configFile >$out
-    '';
+        export ATTIC_SERVER_TOKEN_HS256_SECRET_BASE64="dGVzdCBzZWNyZXQ="
+        export ATTIC_SERVER_DATABASE_URL="sqlite://:memory:"
+        ${lib.getExe cfg.package} --mode check-config -f $configFile
+        cat <$configFile >$out
+      '';
 
   atticadmShim = pkgs.writeShellScript "atticadm" ''
     if [ -n "$ATTICADM_PWD" ]; then
@@ -40,12 +44,12 @@
   atticadmWrapper = pkgs.writeShellScriptBin "atticd-atticadm" ''
     exec systemd-run \
       --quiet \
+      --pipe \
       --pty \
-      --same-dir \
       --wait \
       --collect \
       --service-type=exec \
-      --property=EnvironmentFile=${cfg.credentialsFile} \
+      --property=EnvironmentFile=${cfg.environmentFile} \
       --property=DynamicUser=yes \
       --property=User=${cfg.user} \
       --property=Environment=ATTICADM_PWD=$(pwd) \
@@ -54,40 +58,41 @@
       ${atticadmShim} "$@"
   '';
 
-  hasLocalPostgresDB = let
-    url = cfg.settings.database.url or "";
-    localStrings = ["localhost" "127.0.0.1" "/run/postgresql"];
-    hasLocalStrings = lib.any (lib.flip lib.hasInfix url) localStrings;
-  in
+  hasLocalPostgresDB =
+    let
+      url = cfg.settings.database.url or "";
+      localStrings = [
+        "localhost"
+        "127.0.0.1"
+        "/run/postgresql"
+      ];
+      hasLocalStrings = lib.any (lib.flip lib.hasInfix url) localStrings;
+    in
     config.services.postgresql.enable && lib.hasPrefix "postgresql://" url && hasLocalStrings;
-in {
+in
+{
+  imports = [
+    (lib.mkRenamedOptionModule [ "services" "atticd" "credentialsFile" ] [ "services" "atticd" "environmentFile" ])
+  ];
+
   options = {
     services.atticd = {
-      enable = lib.mkOption {
-        description = ''
-          Whether to enable the atticd, the Nix Binary Cache server.
-        '';
-        type = types.bool;
-        default = false;
-      };
-      package = lib.mkOption {
-        description = ''
-          The package to use.
-        '';
-        type = types.package;
-        default = pkgs.attic-server;
-      };
-      credentialsFile = lib.mkOption {
+      enable = lib.mkEnableOption "the atticd, the Nix Binary Cache server";
+
+      package = lib.mkPackageOption pkgs "attic-server" { };
+
+      environmentFile = lib.mkOption {
         description = ''
           Path to an EnvironmentFile containing required environment
           variables:
 
-          - ATTIC_SERVER_TOKEN_HS256_SECRET_BASE64: The Base64-encoded version of the
-            HS256 JWT secret. Generate it with `openssl rand 64 | base64 -w0`.
+          - ATTIC_SERVER_TOKEN_RS256_SECRET_BASE64: The base64-encoded RSA PEM PKCS1 of the
+            RS256 JWT secret. Generate it with `openssl genrsa -traditional 4096 | base64 -w0`.
         '';
         type = types.nullOr types.path;
         default = null;
       };
+
       user = lib.mkOption {
         description = ''
           The group under which attic runs.
@@ -95,6 +100,7 @@ in {
         type = types.str;
         default = "atticd";
       };
+
       group = lib.mkOption {
         description = ''
           The user under which attic runs.
@@ -102,13 +108,15 @@ in {
         type = types.str;
         default = "atticd";
       };
+
       settings = lib.mkOption {
         description = ''
           Structured configurations of atticd.
         '';
         type = format.type;
-        default = {}; # setting defaults here does not compose well
+        default = { }; # setting defaults here does not compose well
       };
+
       configFile = lib.mkOption {
         description = ''
           Path to an existing atticd configuration file.
@@ -134,7 +142,11 @@ in {
 
           There are several other supported modes that perform one-off operations, but these are the only ones that make sense to run via the NixOS module.
         '';
-        type = lib.types.enum ["monolithic" "api-server" "garbage-collector"];
+        type = lib.types.enum [
+          "monolithic"
+          "api-server"
+          "garbage-collector"
+        ];
         default = "monolithic";
       };
 
@@ -149,80 +161,108 @@ in {
       };
     };
   };
-  config = lib.mkIf (cfg.enable) (lib.mkMerge [
-    {
-      assertions = [
-        {
-          assertion = cfg.credentialsFile != null;
-          message = ''
-            <option>services.atticd.credentialsFile</option> is not set.
 
-            Run `openssl rand 64 | base64 -w0` and create a file with the following contents:
+  config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.environmentFile != null;
+        message = ''
+          <option>services.atticd.environmentFile</option> is not set.
 
-            ATTIC_SERVER_TOKEN_HS256_SECRET_BASE64="output from command"
+          Run `openssl genrsa -traditional -out private_key.pem 4096 | base64 -w0` and create a file with the following contents:
 
-            Then, set `services.atticd.credentialsFile` to the quoted absolute path of the file.
-          '';
-        }
-        {
-          assertion = !lib.isStorePath cfg.credentialsFile;
-          message = ''
-            <option>services.atticd.credentialsFile</option> points to a path in the Nix store. The Nix store is globally readable.
+          ATTIC_SERVER_TOKEN_RS256_SECRET="output from command"
 
-            You should use a quoted absolute path to prevent this.
-          '';
-        }
-      ];
+          Then, set `services.atticd.environmentFile` to the quoted absolute path of the file.
+        '';
+      }
+      {
+        assertion = !lib.isStorePath cfg.environmentFile;
+        message = ''
+          <option>services.atticd.environmentFile</option> points to a path in the Nix store. The Nix store is globally readable.
 
-      services.atticd.settings = {
+          You should use a quoted absolute path to prevent leaking secrets in the Nix store.
+        '';
+      }
+    ];
 
-        database = lib.mkDefault {};
+    services.atticd.settings = {
+      database.url = lib.mkDefault "sqlite:///var/lib/atticd/server.db?mode=rwc";
 
-        # "storage" is internally tagged
-        # if the user sets something the whole thing must be replaced
-        storage = lib.mkDefault {
-          type = "local";
-          path = "/var/lib/atticd/storage";
-        };
+      # "storage" is internally tagged
+      # if the user sets something the whole thing must be replaced
+      storage = lib.mkDefault {
+        type = "local";
+        path = "/var/lib/atticd/storage";
       };
+    };
 
-      systemd.services.atticd = {
-        wantedBy = ["multi-user.target"];
-        after =
-          ["network.target"]
-          ++ lib.optionals hasLocalPostgresDB ["postgresql.service" "nss-lookup.target"];
-        serviceConfig = {
-          ExecStart = "${cfg.package}/bin/atticd -f ${checkedConfigFile} --mode ${cfg.mode}";
-          EnvironmentFile = cfg.credentialsFile;
-          StateDirectory = "atticd"; # for usage with local storage and sqlite
-          DynamicUser = true;
-          User = cfg.user;
-          Group = cfg.group;
-          ProtectHome = true;
-          ProtectHostname = true;
-          ProtectKernelLogs = true;
-          ProtectKernelModules = true;
-          ProtectKernelTunables = true;
-          ProtectProc = "invisible";
-          ProtectSystem = "strict";
-          Restart = "on-failure";
-          RestartSec = 10;
-          RestrictAddressFamilies = ["AF_INET" "AF_INET6" "AF_UNIX"];
-          RestrictNamespaces = true;
-          RestrictRealtime = true;
-          RestrictSUIDSGID = true;
-          ReadWritePaths = let
+    systemd.services.atticd = {
+      wantedBy = [ "multi-user.target" ];
+      after = [ "network-online.target" ] ++ lib.optionals hasLocalPostgresDB [ "postgresql.service" ];
+      requires = lib.optionals hasLocalPostgresDB [ "postgresql.service" ];
+      wants = [ "network-online.target" ];
+
+      serviceConfig = {
+        ExecStart = "${lib.getExe cfg.package} -f ${checkedConfigFile} --mode ${cfg.mode}";
+        EnvironmentFile = cfg.environmentFile;
+        StateDirectory = "atticd"; # for usage with local storage and sqlite
+        DynamicUser = true;
+        User = cfg.user;
+        Group = cfg.group;
+        Restart = "on-failure";
+        RestartSec = 10;
+
+        CapabilityBoundingSet = [ "" ];
+        DeviceAllow = "";
+        DevicePolicy = "closed";
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
+        NoNewPrivileges = true;
+        PrivateDevices = true;
+        PrivateTmp = true;
+        PrivateUsers = true;
+        ProcSubset = "pid";
+        ProtectClock = true;
+        ProtectControlGroups = true;
+        ProtectHome = true;
+        ProtectHostname = true;
+        ProtectKernelLogs = true;
+        ProtectKernelModules = true;
+        ProtectKernelTunables = true;
+        ProtectProc = "invisible";
+        ProtectSystem = "strict";
+        ReadWritePaths =
+          let
             path = cfg.settings.storage.path;
             isDefaultStateDirectory = path == "/var/lib/atticd" || lib.hasPrefix "/var/lib/atticd/" path;
           in
-            lib.optionals (cfg.settings.storage.type or "" == "local" && !isDefaultStateDirectory) [path];
-        };
+          lib.optionals (cfg.settings.storage.type or "" == "local" && !isDefaultStateDirectory) [ path ];
+        RemoveIPC = true;
+        RestrictAddressFamilies = [
+          "AF_INET"
+          "AF_INET6"
+          "AF_UNIX"
+        ];
+        RestrictNamespaces = true;
+        RestrictRealtime = true;
+        RestrictSUIDSGID = true;
+        SystemCallArchitectures = "native";
+        SystemCallFilter = [
+          "@system-service"
+          "~@resources"
+          "~@privileged"
+        ];
+        UMask = "0077";
       };
+    };
 
-      environment.systemPackages = [atticadmWrapper];
-    }
-    (lib.mkIf cfg.useFlakeCompatOverlay {
-      nixpkgs.overlays = [overlay];
-    })
-  ]);
+    environment.systemPackages = [
+      atticadmWrapper
+    ];
+
+    nixpkgs.overlays = lib.mkIf cfg.useFlakeCompatOverlay [
+      overlay
+    ];
+  };
 }
