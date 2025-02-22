@@ -125,6 +125,11 @@ let
     cargoExtraArgs = " -p attic-client";
   };
 
+  # Client-only package.
+  attic-queue = mkAttic {
+    cargoExtraArgs = " -p attic-queue";
+  };
+
   # Server-only package with fat LTO enabled.
   #
   # Because of Cargo's feature unification, the common `attic` crate always
@@ -185,5 +190,5 @@ let
     '';
   } // extraArgs);
 in {
-  inherit cargoArtifacts attic attic-client attic-server attic-tests;
+  inherit cargoArtifacts attic attic-client attic-server attic-queue attic-tests;
 }

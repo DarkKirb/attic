@@ -70,6 +70,7 @@ in
             attic
             attic-client
             attic-server
+            attic-queue
           ;
 
           attic-nixpkgs = pkgs.callPackage ../package.nix { };
