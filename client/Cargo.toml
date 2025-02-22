@@ -25,7 +25,9 @@ futures = "0.3.28"
 humantime = "2.1.0"
 indicatif = "0.17.6"
 lazy_static = "1.4.0"
-notify = { version = "7.0.0", default-features = false, features = ["macos_kqueue"] }
+notify = { version = "7.0.0", default-features = false, features = [
+	"macos_kqueue",
+] }
 regex = "1.8.3"
 reqwest = { version = "0.12.4", default-features = false, features = [
 	"json",
@@ -39,6 +41,7 @@ toml = "0.8.8"
 tracing = "0.1.37"
 tracing-subscriber = "0.3.17"
 xdg = "2.5.2"
+pin-project = "1.1.9"
 
 [dependencies.tokio]
 version = "1.32.0"
@@ -50,6 +53,7 @@ features = [
 	"rt",
 	"rt-multi-thread",
 	"sync",
+	"io-std",
 ]
 
 [dependencies.async-compression]
