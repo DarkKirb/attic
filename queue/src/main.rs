@@ -46,7 +46,7 @@ impl Job for QueuedInput {
         debug!("Starting to preprocess path: {:?}", self.path);
 
         let mut deps = NIX_STORE
-            .compute_fs_closure(self.path.clone(), false, true, true)
+            .compute_fs_closure(self.path.clone(), false, true, false)
             .await?;
         deps.push(self.path.clone());
 
