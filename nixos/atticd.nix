@@ -190,6 +190,7 @@ in
     ];
 
     services.atticd.settings = {
+      database = { };
 
       # "storage" is internally tagged
       # if the user sets something the whole thing must be replaced
