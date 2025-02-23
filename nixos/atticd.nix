@@ -72,7 +72,10 @@ let
 in
 {
   imports = [
-    (lib.mkRenamedOptionModule [ "services" "atticd" "credentialsFile" ] [ "services" "atticd" "environmentFile" ])
+    (lib.mkRenamedOptionModule
+      [ "services" "atticd" "credentialsFile" ]
+      [ "services" "atticd" "environmentFile" ]
+    )
   ];
 
   options = {
@@ -187,7 +190,6 @@ in
     ];
 
     services.atticd.settings = {
-      database.url = lib.mkDefault "sqlite:///var/lib/atticd/server.db?mode=rwc";
 
       # "storage" is internally tagged
       # if the user sets something the whole thing must be replaced
