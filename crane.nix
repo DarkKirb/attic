@@ -86,7 +86,7 @@ let
     ATTIC_DISTRIBUTOR = "attic";
 
     # See comment in `attic/build.rs`
-    NIX_INCLUDE_PATH = "${lib.getDev nix}/include";
+    NIX_INCLUDE_PATH = "${lib.getDev nixStable}/include";
 
     # See comment in `attic-tests`
     doCheck = false;
@@ -112,7 +112,7 @@ let
     };
 
     passthru = {
-      inherit nix;
+      nix = nixStable;
     };
   } // args // extraArgs);
 
@@ -177,7 +177,7 @@ let
     doInstallCargoArtifacts = false;
 
     # See comment in `attic/build.rs`
-    NIX_INCLUDE_PATH = "${lib.getDev nix}/include";
+    NIX_INCLUDE_PATH = "${lib.getDev nixStable}/include";
 
     installPhase = ''
       runHook preInstall
