@@ -16,7 +16,7 @@
 , installShellFiles
 , jq
 
-, nix
+, nixStable
 , boost
 , darwin
 , libiconv
@@ -48,7 +48,7 @@ let
   ];
 
   buildInputs = [
-    nix boost
+    nixStable boost
   ] ++ lib.optionals stdenv.isDarwin [
     darwin.apple_sdk.frameworks.SystemConfiguration
     libiconv
