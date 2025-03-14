@@ -7,7 +7,7 @@
 { lib, stdenv, rustPlatform
 , pkg-config
 , installShellFiles
-, nix
+, nixStable
 , boost
 , darwin
 
@@ -36,7 +36,7 @@ in rustPlatform.buildRustPackage rec {
   ];
 
   buildInputs = [
-    nix boost
+    nixStable boost
   ] ++ lib.optionals stdenv.isDarwin (with darwin.apple_sdk.frameworks; [
     SystemConfiguration
   ]);
@@ -50,7 +50,7 @@ in rustPlatform.buildRustPackage rec {
   ATTIC_DISTRIBUTOR = "attic";
 
   # See comment in `attic/build.rs`
-  NIX_INCLUDE_PATH = "${lib.getDev nix}/include";
+  NIX_INCLUDE_PATH = "${lib.getDev nixStable}/include";
 
   # Recursive Nix is not stable yet
   doCheck = false;
