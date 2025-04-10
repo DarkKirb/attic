@@ -42,9 +42,15 @@ serde_json = "1.0.96"
 [build-dependencies]
 cc = "1.1.13"
 cxx-build = { version = "1.0", optional = true }
-pkg-config = "0.3.27"
-tempfile = "3"
+system-deps = { version = "7.0", optional = true }
 version-compare = "0.2.0"
+
+[package.metadata.system-deps]
+nix-store = { version = "2.24", optional = true }
+nix-main = { version = "2.24", optional = true }
+
+lix-store = { version = "2.91", optional = true }
+lix-main = { version = "2.91", optional = true }
 
 [features]
 default = ["chunking", "nix_store", "stream", "tokio"]
@@ -55,7 +61,7 @@ chunking = ["tokio", "stream", "dep:async-stream"]
 # Native libnixstore bindings.
 #
 # When disabled, the native Rust portions of nix_store can still be used.
-nix_store = ["tokio", "tokio/fs", "tokio/process", "dep:cxx", "dep:cxx-build"]
+nix_store = ["tokio", "tokio/fs", "tokio/process", "dep:cxx", "dep:cxx-build", "dep:system-deps"]
 
 # Stream utilities.
 stream = ["tokio", "dep:async-stream"]
