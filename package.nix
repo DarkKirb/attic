@@ -4,25 +4,40 @@
 # For the expression used for CI as well as distribution from this repo, see
 # `crane.nix`.
 
-{ lib, stdenv, rustPlatform
-, pkg-config
-, installShellFiles
-, nixVersions
-, boost
-, darwin
+{
+  lib,
+  stdenv,
+  rustPlatform,
+  pkg-config,
+  installShellFiles,
+  nixVersions,
+  boost,
+  darwin,
 
-# Only build the client
-, clientOnly ? false
+  # Only build the client
+  clientOnly ? false,
 
-# Only build certain crates
-, crates ? if clientOnly then [ "attic-client" ] else [ "attic-client" "attic-server" ]
+  # Only build certain crates
+  crates ?
+    if clientOnly then
+      [ "attic-client" ]
+    else
+      [
+        "attic-client"
+        "attic-server"
+      ],
 }:
 
 let
-  nixStable = nixVersions.stable_upstream or nixVersions.stable;
-  ignoredPaths = [ ".github" "target" "book" ];
+  nixStable = nixVersions.nix_2_20 or nixVersions.stable;
+  ignoredPaths = [
+    ".github"
+    "target"
+    "book"
+  ];
 
-in rustPlatform.buildRustPackage rec {
+in
+rustPlatform.buildRustPackage rec {
   pname = "attic";
   version = "0.1.0";
 
@@ -36,11 +51,17 @@ in rustPlatform.buildRustPackage rec {
     installShellFiles
   ];
 
-  buildInputs = [
-    nixStable boost
-  ] ++ lib.optionals stdenv.isDarwin (with darwin.apple_sdk.frameworks; [
-    SystemConfiguration
-  ]);
+  buildInputs =
+    [
+      nixStable
+      boost
+    ]
+    ++ lib.optionals stdenv.isDarwin (
+      with darwin.apple_sdk.frameworks;
+      [
+        SystemConfiguration
+      ]
+    );
 
   cargoLock = {
     lockFile = ./Cargo.lock;
