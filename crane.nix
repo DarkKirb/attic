@@ -26,7 +26,7 @@
 }:
 
 let
-  nixStable = nixVersions.nix_2_28 or nixVersions.stable;
+  nixStable = nixVersions.stable_upstream or nixVersions.stable;
   version = "0.1.0";
 
   ignoredPaths = [
