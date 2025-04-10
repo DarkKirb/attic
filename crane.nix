@@ -16,7 +16,7 @@
 , installShellFiles
 , jq
 
-, nixStable
+, nixVersions
 , boost
 , darwin
 , libiconv
@@ -25,6 +25,7 @@
 }:
 
 let
+  nixStable = nixVersions.stable_upstream or nixVersions.stable;
   version = "0.1.0";
 
   ignoredPaths = [

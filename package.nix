@@ -7,7 +7,7 @@
 { lib, stdenv, rustPlatform
 , pkg-config
 , installShellFiles
-, nixStable
+, nixVersions
 , boost
 , darwin
 
@@ -19,6 +19,7 @@
 }:
 
 let
+  nixStable = nixVersions.stable_upstream or nixVersions.stable;
   ignoredPaths = [ ".github" "target" "book" ];
 
 in rustPlatform.buildRustPackage rec {
